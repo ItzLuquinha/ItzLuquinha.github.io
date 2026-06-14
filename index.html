@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timer</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg:       #07070f;
+    --void:     #0d0d1a;
+    --violet:   #7c3aed;
+    --glow:     #a855f7;
+    --soft:     #c4b5fd;
+    --white:    #f0eeff;
+    --muted:    #6b6b8a;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--white);
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ── Canvas de partículas ── */
+  #canvas {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Nebulosa de fundo ── */
+  .nebula {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: .18;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .nebula-a {
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, #5b21b6, transparent 70%);
+    top: -160px; left: -160px;
+  }
+  .nebula-b {
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, #2e1065, transparent 70%);
+    bottom: -120px; right: -120px;
+  }
+
+  /* ── Wrapper central ── */
+  .stage {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 56px;
+    user-select: none;
+  }
+
+  /* ── Anel orbital SVG ── */
+  .orbit-ring {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 520px; height: 520px;
+    pointer-events: none;
+    z-index: -1;
+    animation: spin 28s linear infinite;
+  }
+  @keyframes spin {
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+  }
+  .orbit-ring circle.track {
+    fill: none;
+    stroke: #ffffff08;
+    stroke-width: 1;
+  }
+  .orbit-ring circle.arc {
+    fill: none;
+    stroke: var(--violet);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 6px var(--glow));
+    stroke-dasharray: 400 1257;
+    opacity: .7;
+  }
+  /* ponto correndo no anel */
+  .orbit-dot {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--glow);
+    box-shadow: 0 0 12px 4px var(--glow);
+    transform-origin: 0 0;
+    animation: dot-orbit 28s linear infinite;
+    margin: -4px;
+  }
+  @keyframes dot-orbit {
+    from { transform: rotate(0deg) translateX(260px); }
+    to   { transform: rotate(360deg) translateX(260px); }
+  }
+
+  /* ── Grid dos blocos ── */
+  .blocks {
+    display: flex;
+    gap: 28px;
+    align-items: flex-end;
+  }
+
+  .block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* separador ":" */
+  .sep {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 72px;
+    line-height: 1;
+    color: var(--muted);
+    padding-bottom: 28px;
+    opacity: .5;
+    letter-spacing: 0;
+  }
+
+  /* caixa do número */
+  .card {
+    position: relative;
+    width: 120px; height: 130px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 16px;
+    background: linear-gradient(160deg, #14102a 0%, #0d0b1e 100%);
+    border: 1px solid #ffffff0f;
+    box-shadow:
+      inset 0 1px 0 #ffffff08,
+      0 0 0 1px #3b0764 22,
+      0 20px 60px #00000088;
+    overflow: hidden;
+  }
+
+  /* reflexo sutil no topo */
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 40%;
+    background: linear-gradient(to bottom, #ffffff06, transparent);
+    border-radius: 16px 16px 0 0;
+    pointer-events: none;
+  }
+
+  /* linha divisória do flip */
+  .card::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    top: 50%;
+    height: 1px;
+    background: #00000060;
+    pointer-events: none;
+  }
+
+  .num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 88px;
+    line-height: 1;
+    letter-spacing: 4px;
+    color: var(--white);
+    text-shadow:
+      0 0 30px var(--violet),
+      0 0 60px #7c3aed44;
+    transition: color .15s;
+  }
+
+  .label {
+    font-size: 10px;
+    font-weight: 300;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* barra de progresso abaixo do número */
+  .prog-wrap {
+    width: 120px;
+    height: 2px;
+    background: #ffffff08;
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .prog-bar {
+    height: 100%;
+    border-radius: 99px;
+    background: linear-gradient(to right, var(--violet), var(--glow));
+    box-shadow: 0 0 8px var(--glow);
+    transition: width .9s cubic-bezier(.4,0,.2,1);
+  }
+
+  /* ── Linha de status ── */
+  .status {
+    font-size: 11px;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    color: var(--muted);
+    opacity: .6;
+    animation: pulse-text 3s ease-in-out infinite;
+  }
+  @keyframes pulse-text {
+    0%, 100% { opacity: .4; }
+    50%       { opacity: .8; }
+  }
+
+  /* ── Fim do timer ── */
+  .ended-msg {
+    display: none;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 60px;
+    letter-spacing: 8px;
+    color: var(--soft);
+    text-shadow: 0 0 40px var(--violet);
+    text-align: center;
+  }
+
+  /* ── Responsividade mínima ── */
+  @media (max-width: 600px) {
+    .orbit-ring, .orbit-dot { display: none; }
+    .blocks { gap: 10px; }
+    .card { width: 76px; height: 84px; }
+    .num { font-size: 56px; }
+    .sep { font-size: 46px; padding-bottom: 18px; }
+    .prog-wrap { width: 76px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .orbit-ring, .orbit-dot { animation: none; }
+  }
+
+  /* ── Botão Admin ── */
+  #admin-btn {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 100;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: 1px solid #ffffff10;
+    background: #0d0b1e;
+    color: var(--muted);
+    font-size: 15px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color .2s, color .2s, box-shadow .2s;
+    opacity: .35;
+  }
+  #admin-btn:hover {
+    opacity: 1;
+    border-color: var(--violet);
+    color: var(--soft);
+    box-shadow: 0 0 16px #7c3aed55;
+  }
+
+  /* ── Overlay / Modal ── */
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: #00000088;
+    backdrop-filter: blur(8px);
+    align-items: center;
+    justify-content: center;
+  }
+  .overlay.open { display: flex; }
+
+  .modal {
+    background: linear-gradient(160deg, #13102a 0%, #0b0917 100%);
+    border: 1px solid #ffffff10;
+    border-radius: 20px;
+    padding: 36px 40px 32px;
+    width: 340px;
+    box-shadow: 0 40px 100px #00000099, 0 0 0 1px #7c3aed22;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    animation: modal-in .25s cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes modal-in {
+    from { opacity: 0; transform: scale(.92) translateY(12px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .modal-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 26px;
+    letter-spacing: 4px;
+    color: var(--soft);
+    text-align: center;
+  }
+
+  .modal-label {
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .modal-input {
+    width: 100%;
+    background: #0d0b1e;
+    border: 1px solid #ffffff12;
+    border-radius: 10px;
+    color: var(--white);
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    padding: 10px 14px;
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .modal-input:focus {
+    border-color: var(--violet);
+    box-shadow: 0 0 0 3px #7c3aed22;
+  }
+  .modal-input.error {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3px #ef444422;
+    animation: shake .3s;
+  }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25%      { transform: translateX(-6px); }
+    75%      { transform: translateX(6px); }
+  }
+
+  /* grid de inputs de tempo */
+  .time-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .time-field label {
+    display: block;
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+  .time-field input {
+    width: 100%;
+    background: #0d0b1e;
+    border: 1px solid #ffffff12;
+    border-radius: 10px;
+    color: var(--white);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 2px;
+    padding: 8px 12px;
+    outline: none;
+    text-align: center;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .time-field input:focus {
+    border-color: var(--violet);
+    box-shadow: 0 0 0 3px #7c3aed22;
+  }
+
+  .modal-divider {
+    height: 1px;
+    background: #ffffff08;
+    margin: 0 -4px;
+  }
+
+  .modal-row {
+    display: flex;
+    gap: 10px;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 11px 0;
+    border-radius: 10px;
+    border: none;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: opacity .15s, box-shadow .15s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn-cancel {
+    background: #1a1630;
+    color: var(--muted);
+    border: 1px solid #ffffff10;
+  }
+  .btn-apply {
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    color: #fff;
+    box-shadow: 0 4px 20px #7c3aed55;
+  }
+  .btn-reset {
+    background: #1a1630;
+    color: #f87171;
+    border: 1px solid #ef444420;
+    font-size: 10px;
+  }
+  .btn-reset:hover { border-color: #ef4444; color: #ef4444; opacity: 1; }
+
+  .modal-error {
+    font-size: 11px;
+    color: #f87171;
+    text-align: center;
+    min-height: 16px;
+    letter-spacing: 1px;
+  }
+
+  /* painel de tempo (hidden até auth) */
+  #panel-auth, #panel-time { width: 100%; }
+  #panel-time { display: none; }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+<div class="nebula nebula-a"></div>
+<div class="nebula nebula-b"></div>
+
+<div class="stage">
+
+  <!-- anel orbital -->
+  <div class="orbit-ring-container" style="position:absolute;width:520px;height:520px;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;">
+    <svg class="orbit-ring" viewBox="0 0 520 520">
+      <circle class="track" cx="260" cy="260" r="200"/>
+      <circle class="arc"   cx="260" cy="260" r="200" transform="rotate(-90 260 260)"/>
+    </svg>
+    <div class="orbit-dot"></div>
+  </div>
+
+  <!-- blocos -->
+  <div class="blocks">
+
+    <div class="block" id="b-days">
+      <div class="card"><span class="num" id="n-days">07</span></div>
+      <div class="prog-wrap"><div class="prog-bar" id="p-days" style="width:100%"></div></div>
+      <span class="label">dias</span>
+    </div>
+
+    <span class="sep">:</span>
+
+    <div class="block" id="b-hours">
+      <div class="card"><span class="num" id="n-hours">00</span></div>
+      <div class="prog-wrap"><div class="prog-bar" id="p-hours" style="width:100%"></div></div>
+      <span class="label">horas</span>
+    </div>
+
+    <span class="sep">:</span>
+
+    <div class="block" id="b-mins">
+      <div class="card"><span class="num" id="n-mins">00</span></div>
+      <div class="prog-wrap"><div class="prog-bar" id="p-mins" style="width:100%"></div></div>
+      <span class="label">minutos</span>
+    </div>
+
+    <span class="sep">:</span>
+
+    <div class="block" id="b-secs">
+      <div class="card"><span class="num" id="n-secs">00</span></div>
+      <div class="prog-wrap"><div class="prog-bar" id="p-secs" style="width:100%"></div></div>
+      <span class="label">segundos</span>
+    </div>
+
+  </div>
+
+  <div class="status" id="status-line">contando o tempo</div>
+  <div class="ended-msg" id="ended">tempo esgotado</div>
+
+</div>
+
+<!-- ── Botão Admin ── -->
+<button id="admin-btn" title="Admin">⚙</button>
+
+<!-- ── Overlay Admin ── -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="modal-title">Admin</div>
+
+    <!-- Painel de autenticação -->
+    <div id="panel-auth">
+      <div class="modal-label">Senha</div>
+      <input class="modal-input" id="input-pass" type="password" placeholder="••••" maxlength="20" autocomplete="off"/>
+      <div class="modal-error" id="auth-error"></div>
+      <div class="modal-row" style="margin-top:14px">
+        <button class="btn btn-cancel" id="btn-close-auth">Cancelar</button>
+        <button class="btn btn-apply"  id="btn-login">Entrar</button>
+      </div>
+    </div>
+
+    <!-- Painel de controle do timer -->
+    <div id="panel-time">
+      <div class="modal-label">Definir novo tempo restante</div>
+      <div class="time-grid">
+        <div class="time-field">
+          <label>Dias</label>
+          <input type="number" id="inp-days" min="0" max="99" value="7">
+        </div>
+        <div class="time-field">
+          <label>Horas</label>
+          <input type="number" id="inp-hours" min="0" max="23" value="0">
+        </div>
+        <div class="time-field">
+          <label>Minutos</label>
+          <input type="number" id="inp-mins" min="0" max="59" value="0">
+        </div>
+        <div class="time-field">
+          <label>Segundos</label>
+          <input type="number" id="inp-secs" min="0" max="59" value="0">
+        </div>
+      </div>
+      <div class="modal-divider"></div>
+      <div class="modal-row">
+        <button class="btn btn-cancel" id="btn-close-time">Fechar</button>
+        <button class="btn btn-apply"  id="btn-apply">Aplicar</button>
+      </div>
+      <button class="btn btn-reset" id="btn-reset" style="width:100%;margin-top:6px">↺ Resetar para 7 dias a partir de agora</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ── Configuração ─────────────────────────────────────── */
+const WEEK_MS  = 7 * 24 * 60 * 60 * 1000;
+const LS_KEY   = 'timer_end_v2';
+const ADMIN_PW = '3124';
+
+// endTime mutável — armazenado como timestamp absoluto
+let endTime = parseInt(localStorage.getItem(LS_KEY) || '0', 10);
+if (!endTime || isNaN(endTime) || endTime < Date.now()) {
+  endTime = Date.now() + WEEK_MS;
+  localStorage.setItem(LS_KEY, endTime);
+}
+
+/* ── Elementos do timer ───────────────────────────────── */
+const nDays  = document.getElementById('n-days');
+const nHours = document.getElementById('n-hours');
+const nMins  = document.getElementById('n-mins');
+const nSecs  = document.getElementById('n-secs');
+const pDays  = document.getElementById('p-days');
+const pHours = document.getElementById('p-hours');
+const pMins  = document.getElementById('p-mins');
+const pSecs  = document.getElementById('p-secs');
+const status = document.getElementById('status-line');
+const ended  = document.getElementById('ended');
+
+function pad(n) { return String(Math.max(0,n)).padStart(2, '0'); }
+
+let tickTimeout = null;
+function tick() {
+  clearTimeout(tickTimeout);
+  const now  = Date.now();
+  const left = endTime - now;
+
+  if (left <= 0) {
+    nDays.textContent = nHours.textContent = nMins.textContent = nSecs.textContent = '00';
+    pDays.style.width = pHours.style.width = pMins.style.width = pSecs.style.width = '0%';
+    status.style.display = 'none';
+    ended.style.display  = 'block';
+    return;
+  }
+
+  ended.style.display  = 'none';
+  status.style.display = '';
+
+  const totalSecs = Math.floor(left / 1000);
+  const d = Math.floor(totalSecs / 86400);
+  const h = Math.floor((totalSecs % 86400) / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = totalSecs % 60;
+
+  nDays.textContent  = pad(d);
+  nHours.textContent = pad(h);
+  nMins.textContent  = pad(m);
+  nSecs.textContent  = pad(s);
+
+  pDays.style.width  = Math.min(100, (d / 7)  * 100) + '%';
+  pHours.style.width = Math.min(100, (h / 23) * 100) + '%';
+  pMins.style.width  = Math.min(100, (m / 59) * 100) + '%';
+  pSecs.style.width  = Math.min(100, (s / 59) * 100) + '%';
+
+  tickTimeout = setTimeout(tick, 1000);
+}
+tick();
+
+/* ── Admin: elementos ─────────────────────────────────── */
+const overlay      = document.getElementById('overlay');
+const panelAuth    = document.getElementById('panel-auth');
+const panelTime    = document.getElementById('panel-time');
+const inputPass    = document.getElementById('input-pass');
+const authError    = document.getElementById('auth-error');
+const btnLogin     = document.getElementById('btn-login');
+const btnCloseAuth = document.getElementById('btn-close-auth');
+const btnCloseTime = document.getElementById('btn-close-time');
+const btnApply     = document.getElementById('btn-apply');
+const btnReset     = document.getElementById('btn-reset');
+const inpDays      = document.getElementById('inp-days');
+const inpHours     = document.getElementById('inp-hours');
+const inpMins      = document.getElementById('inp-mins');
+const inpSecs      = document.getElementById('inp-secs');
+
+function openOverlay() {
+  // sempre começa no painel de senha
+  panelAuth.style.display = '';
+  panelTime.style.display = 'none';
+  inputPass.value = '';
+  authError.textContent = '';
+  inputPass.classList.remove('error');
+  overlay.classList.add('open');
+  setTimeout(() => inputPass.focus(), 50);
+}
+
+function closeOverlay() {
+  overlay.classList.remove('open');
+}
+
+document.getElementById('admin-btn').addEventListener('click', openOverlay);
+btnCloseAuth.addEventListener('click', closeOverlay);
+btnCloseTime.addEventListener('click', closeOverlay);
+overlay.addEventListener('click', e => { if (e.target === overlay) closeOverlay(); });
+
+/* ── Login ────────────────────────────────────────────── */
+function tryLogin() {
+  if (inputPass.value === ADMIN_PW) {
+    authError.textContent = '';
+    panelAuth.style.display = 'none';
+    panelTime.style.display = '';
+    // preenche os campos com o tempo atual restante
+    const left = Math.max(0, endTime - Date.now());
+    const ts   = Math.floor(left / 1000);
+    inpDays.value  = Math.floor(ts / 86400);
+    inpHours.value = Math.floor((ts % 86400) / 3600);
+    inpMins.value  = Math.floor((ts % 3600) / 60);
+    inpSecs.value  = ts % 60;
+    setTimeout(() => inpDays.focus(), 50);
+  } else {
+    inputPass.classList.add('error');
+    authError.textContent = 'Senha incorreta';
+    inputPass.value = '';
+    setTimeout(() => { inputPass.classList.remove('error'); authError.textContent=''; }, 1400);
+  }
+}
+
+btnLogin.addEventListener('click', tryLogin);
+inputPass.addEventListener('keydown', e => { if (e.key === 'Enter') tryLogin(); });
+
+/* ── Aplicar novo tempo ───────────────────────────────── */
+btnApply.addEventListener('click', () => {
+  const d = Math.max(0, parseInt(inpDays.value)  || 0);
+  const h = Math.max(0, Math.min(23, parseInt(inpHours.value) || 0));
+  const m = Math.max(0, Math.min(59, parseInt(inpMins.value)  || 0));
+  const s = Math.max(0, Math.min(59, parseInt(inpSecs.value)  || 0));
+  const totalMs = ((d * 86400) + (h * 3600) + (m * 60) + s) * 1000;
+  if (totalMs <= 0) return;
+  endTime = Date.now() + totalMs;
+  localStorage.setItem(LS_KEY, endTime);
+  tick();
+  closeOverlay();
+});
+
+/* ── Reset para 7 dias ────────────────────────────────── */
+btnReset.addEventListener('click', () => {
+  endTime = Date.now() + WEEK_MS;
+  localStorage.setItem(LS_KEY, endTime);
+  tick();
+  closeOverlay();
+});
+
+/* ── Partículas ───────────────────────────────────────── */
+const cv  = document.getElementById('canvas');
+const ctx = cv.getContext('2d');
+let W, H, particles = [];
+
+function resize() {
+  W = cv.width  = window.innerWidth;
+  H = cv.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+class Particle {
+  constructor() { this.reset(true); }
+  reset(init = false) {
+    this.x  = Math.random() * W;
+    this.y  = init ? Math.random() * H : H + 4;
+    this.r  = Math.random() * 1.2 + .3;
+    this.vy = -(Math.random() * .3 + .1);
+    this.vx = (Math.random() - .5) * .15;
+    this.a  = Math.random() * .5 + .1;
+    this.da = (Math.random() - .5) * .003;
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.a += this.da;
+    if (this.a < .05 || this.a > .7) this.da *= -1;
+    if (this.y < -6) this.reset();
+  }
+  draw() {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(168,85,247,${this.a})`;
+    ctx.fill();
+  }
+}
+
+for (let i = 0; i < 90; i++) particles.push(new Particle());
+
+function frame() {
+  ctx.clearRect(0, 0, W, H);
+  particles.forEach(p => { p.update(); p.draw(); });
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>
